@@ -251,7 +251,7 @@ for (/**@suppress{duplicate}*/var i = 0; i <= {{{ GL_POOL_TEMP_BUFFERS_SIZE }}};
     '$registerPreMainLoop',
 #endif
 #if FULL_ES2
-    '$webglBufferSubData',
+    '$webglBufferDataFromHeap',
 #endif
   ],
 #if FULL_ES2 || LEGACY_GL_EMULATION
@@ -585,7 +585,7 @@ for (/**@suppress{duplicate}*/var i = 0; i <= {{{ GL_POOL_TEMP_BUFFERS_SIZE }}};
         var size = GL.calcBufLength(cb.size, cb.type, cb.stride, count);
         var buf = GL.getTempVertexBuffer(size);
         GLctx.bindBuffer(0x8892 /*GL_ARRAY_BUFFER*/, buf);
-        webglBufferSubData(0x8892 /*GL_ARRAY_BUFFER*/, 0, size, cb.ptr);
+        webglBufferDataFromHeap(0x8892 /*GL_ARRAY_BUFFER*/, size, cb.ptr);
 #if GL_ASSERTIONS
         GL.validateVertexAttribPointer(cb.size, cb.type, cb.stride, 0);
 #endif
@@ -1273,6 +1273,31 @@ for (/**@suppress{duplicate}*/var i = 0; i <= {{{ GL_POOL_TEMP_BUFFERS_SIZE }}};
     GLctx.bufferSubData(target, offset, src.subarray(data, data + size));
 #endif
   },
+
+#if FULL_ES2
+  // Gives the bound buffer new storage holding `size` bytes of the heap at
+  // `data`. Used for the temp buffers that emulate client-side arrays: those
+  // get reused while the GPU may still be reading their previous contents,
+  // and writing into a buffer that is in use with bufferSubData makes some
+  // implementations (ANGLE on Metal, for one) wait for the GPU first.
+  $webglBufferDataFromHeap__internal: true,
+  $webglBufferDataFromHeap: (target, size, data) => {
+#if WEBGL_USE_GARBAGE_FREE_APIS
+    if ({{{ isCurrentContextWebGL2() }}}) {
+      // A zero length would mean "to the end of the heap" here.
+      if (size) {
+        GLctx.bufferData(target, HEAPU8, 0x88E0 /*GL_STREAM_DRAW*/, data, size);
+      } else {
+        GLctx.bufferData(target, 0, 0x88E0 /*GL_STREAM_DRAW*/);
+      }
+      return;
+    }
+#endif
+#if INCLUDE_WEBGL1_FALLBACK
+    GLctx.bufferData(target, HEAPU8.subarray(data, data + size), 0x88E0 /*GL_STREAM_DRAW*/);
+#endif
+  },
+#endif
 
   $webglGetExtensions__internal: true,
   $webglGetExtensions__deps: ['$getEmscriptenSupportedExtensions'],
@@ -3886,7 +3911,7 @@ for (/**@suppress{duplicate}*/var i = 0; i <= {{{ GL_POOL_TEMP_BUFFERS_SIZE }}};
   },
 
 #if FULL_ES2
-  glDrawElements__deps: ['$webglBufferSubData'],
+  glDrawElements__deps: ['$webglBufferDataFromHeap'],
 #endif
   glDrawElements: (mode, count, type, indices) => {
 #if FULL_ES2
@@ -3896,7 +3921,7 @@ for (/**@suppress{duplicate}*/var i = 0; i <= {{{ GL_POOL_TEMP_BUFFERS_SIZE }}};
       var size = GL.calcBufLength(1, type, 0, count);
       buf = GL.getTempIndexBuffer(size);
       GLctx.bindBuffer(0x8893 /*GL_ELEMENT_ARRAY_BUFFER*/, buf);
-      webglBufferSubData(0x8893 /*GL_ELEMENT_ARRAY_BUFFER*/, 0, size, indices);
+      webglBufferDataFromHeap(0x8893 /*GL_ELEMENT_ARRAY_BUFFER*/, size, indices);
 
       // Calculating vertex count if shader's attribute data is on client side
       if (count > 0) {

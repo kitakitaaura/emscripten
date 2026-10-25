@@ -20,6 +20,10 @@ See docs/process.md for more on how version tagging works.
 
 6.0.14 (in development)
 -----------------------
+- With `-sFULL_ES2`, draws from client-side vertex and index arrays now upload
+  into their temp buffers with `bufferData` instead of `bufferSubData`. Writing
+  into a temp buffer the GPU was still reading made Chrome on macOS (ANGLE's
+  Metal backend) wait for the GPU on every such draw.
 - When compiling and linking in a single command, auxiliary compiler output
   files (such as `.dwo` files from `-gsplit-dwarf` or `.json` files from
   `-ftime-trace`) are now named `<output>-<input>.<ext>`, matching the behavior
